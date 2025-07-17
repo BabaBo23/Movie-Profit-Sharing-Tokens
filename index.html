@@ -1,0 +1,151 @@
+<!-- <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Movie Profit-Sharing Tokens</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>🎬 Movie Profit-Sharing Tokens</h1>
+            <p>Invest in movies and earn royalties from box office success</p>
+        </header>
+
+        <nav class="nav">
+            <button class="nav-btn active" data-tab="dashboard">Dashboard</button>
+            <button class="nav-btn" data-tab="create">Create Movie</button>
+            <button class="nav-btn" data-tab="invest">Invest</button>
+            <button class="nav-btn" data-tab="royalties">Royalties</button>
+            <button class="nav-btn" data-tab="oracle">Oracle</button>
+        </nav>
+
+        <main class="main">
+            <div id="dashboard" class="tab-content active">
+                <h2>📊 Dashboard</h2>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <h3>Total Movies</h3>
+                        <span id="total-movies">0</span>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Your Investments</h3>
+                        <span id="your-investments">0</span>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Claimable Royalties</h3>
+                        <span id="claimable-royalties">0 STX</span>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Platform Fee</h3>
+                        <span id="platform-fee">2.5%</span>
+                    </div>
+                </div>
+                
+                <div class="movies-list">
+                    <h3>🎭 Active Movies</h3>
+                    <div id="movies-container">
+                        <div class="loading">Loading movies...</div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="create" class="tab-content">
+                <h2>🎬 Create Movie Project</h2>
+                <form id="create-movie-form" class="form">
+                    <div class="form-group">
+                        <label for="movie-title">Movie Title</label>
+                        <input type="text" id="movie-title" maxlength="100" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="target-amount">Target Amount (STX)</label>
+                        <input type="number" id="target-amount" min="1" step="0.000001" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="token-supply">Token Supply</label>
+                        <input type="number" id="token-supply" min="1" required>
+                    </div>
+                    <button type="submit" class="btn-primary">Create Movie Project</button>
+                </form>
+            </div>
+
+            <div id="invest" class="tab-content">
+                <h2>💰 Invest in Movies</h2>
+                <form id="invest-form" class="form">
+                    <div class="form-group">
+                        <label for="invest-movie-id">Movie ID</label>
+                        <input type="number" id="invest-movie-id" min="1" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="invest-amount">Investment Amount (STX)</label>
+                        <input type="number" id="invest-amount" min="0.000001" step="0.000001" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Expected Tokens</label>
+                        <span id="expected-tokens">0</span>
+                    </div>
+                    <button type="submit" class="btn-primary">Invest Now</button>
+                </form>
+            </div>
+
+            <div id="royalties" class="tab-content">
+                <h2>💎 Claim Royalties</h2>
+                <form id="royalties-form" class="form">
+                    <div class="form-group">
+                        <label for="royalty-movie-id">Movie ID</label>
+                        <input type="number" id="royalty-movie-id" min="1" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Claimable Amount</label>
+                        <span id="claimable-amount">0 STX</span>
+                    </div>
+                    <button type="submit" class="btn-primary">Claim Royalties</button>
+                </form>
+                
+                <div class="royalty-history">
+                    <h3>💰 Your Royalty History</h3>
+                    <div id="royalty-history-container">
+                        <div class="loading">Loading history...</div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="oracle" class="tab-content">
+                <h2>🔮 Oracle Reports</h2>
+                <form id="oracle-form" class="form">
+                    <div class="form-group">
+                        <label for="oracle-movie-id">Movie ID</label>
+                        <input type="number" id="oracle-movie-id" min="1" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="box-office-earnings">Box Office Earnings (STX)</label>
+                        <input type="number" id="box-office-earnings" min="0.000001" step="0.000001" required>
+                    </div>
+                    <button type="submit" class="btn-primary">Report Earnings</button>
+                </form>
+                
+                <div class="oracle-settings">
+                    <h3>⚙️ Oracle Settings</h3>
+                    <form id="oracle-settings-form" class="form">
+                        <div class="form-group">
+                            <label for="oracle-address">Oracle Address</label>
+                            <input type="text" id="oracle-address" placeholder="SP1234...">
+                        </div>
+                        <button type="submit" class="btn-secondary">Set Oracle</button>
+                    </form>
+                </div>
+            </div>
+        </main>
+
+        <div id="status" class="status hidden">
+            <div class="status-content">
+                <span id="status-message"></span>
+                <button id="close-status">×</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html> -->
