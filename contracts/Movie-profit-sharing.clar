@@ -10,8 +10,13 @@
 (define-constant err-oracle-not-set (err u106))
 (define-constant err-already-exists (err u107))
 (define-constant err-distribution-failed (err u108))
+(define-constant err-voting-period-ended (err u109))
+(define-constant err-voting-period-active (err u110))
+(define-constant err-already-voted (err u111))
+(define-constant err-insufficient-voting-power (err u112))
 
 (define-data-var next-movie-id uint u1)
+(define-data-var next-proposal-id uint u1)
 (define-data-var oracle-address (optional principal) none)
 (define-data-var platform-fee uint u250)
 
@@ -48,6 +53,28 @@
 (define-map oracle-reports
   { movie-id: uint, report-id: uint }
   { earnings: uint, reported-at: uint, reporter: principal }
+)
+
+(define-map voting-proposals
+  { proposal-id: uint }
+  {
+    movie-id: uint,
+    proposer: principal,
+    title: (string-ascii 100),
+    description: (string-ascii 500),
+    proposal-type: uint,
+    start-block: uint,
+    end-block: uint,
+    votes-for: uint,
+    votes-against: uint,
+    is-executed: bool,
+    is-active: bool
+  }
+)
+
+(define-map proposal-votes
+  { proposal-id: uint, voter: principal }
+  { vote: bool, voting-power: uint, voted-at: uint }
 )
 
 (define-public (set-oracle (new-oracle principal))
@@ -305,4 +332,121 @@
       u0
     )
   )
+)
+
+(define-public (create-proposal (movie-id uint) (title (string-ascii 100)) (description (string-ascii 500)) (proposal-type uint) (voting-duration uint))
+  (let (
+    (proposal-id (var-get next-proposal-id))
+    (movie (unwrap! (map-get? movies { movie-id: movie-id }) err-not-found))
+    (investor-balance (unwrap! (map-get? investor-balances { movie-id: movie-id, investor: tx-sender }) err-not-found))
+  )
+    (asserts! (get is-active movie) err-movie-not-active)
+    (asserts! (> (get balance investor-balance) u0) err-insufficient-voting-power)
+    (asserts! (> voting-duration u0) err-invalid-amount)
+    (asserts! (<= voting-duration u1440) err-invalid-amount)
+    
+    (map-set voting-proposals
+      { proposal-id: proposal-id }
+      {
+        movie-id: movie-id,
+        proposer: tx-sender,
+        title: title,
+        description: description,
+        proposal-type: proposal-type,
+        start-block: stacks-block-height,
+        end-block: (+ stacks-block-height voting-duration),
+        votes-for: u0,
+        votes-against: u0,
+        is-executed: false,
+        is-active: true
+      }
+    )
+    
+    (var-set next-proposal-id (+ proposal-id u1))
+    (ok proposal-id)
+  )
+)
+
+(define-public (vote-on-proposal (proposal-id uint) (vote bool))
+  (let (
+    (proposal (unwrap! (map-get? voting-proposals { proposal-id: proposal-id }) err-not-found))
+    (movie-id (get movie-id proposal))
+    (investor-balance (unwrap! (map-get? investor-balances { movie-id: movie-id, investor: tx-sender }) err-not-found))
+    (voting-power (get balance investor-balance))
+    (existing-vote (map-get? proposal-votes { proposal-id: proposal-id, voter: tx-sender }))
+  )
+    (asserts! (get is-active proposal) err-movie-not-active)
+    (asserts! (< stacks-block-height (get end-block proposal)) err-voting-period-ended)
+    (asserts! (is-none existing-vote) err-already-voted)
+    (asserts! (> voting-power u0) err-insufficient-voting-power)
+    
+    (map-set proposal-votes
+      { proposal-id: proposal-id, voter: tx-sender }
+      { vote: vote, voting-power: voting-power, voted-at: stacks-block-height }
+    )
+    
+    (map-set voting-proposals
+      { proposal-id: proposal-id }
+      (merge proposal {
+        votes-for: (if vote (+ (get votes-for proposal) voting-power) (get votes-for proposal)),
+        votes-against: (if vote (get votes-against proposal) (+ (get votes-against proposal) voting-power))
+      })
+    )
+    
+    (ok voting-power)
+  )
+)
+
+(define-public (execute-proposal (proposal-id uint))
+  (let (
+    (proposal (unwrap! (map-get? voting-proposals { proposal-id: proposal-id }) err-not-found))
+    (movie-id (get movie-id proposal))
+    (movie (unwrap! (map-get? movies { movie-id: movie-id }) err-not-found))
+  )
+    (asserts! (get is-active proposal) err-movie-not-active)
+    (asserts! (>= stacks-block-height (get end-block proposal)) err-voting-period-active)
+    (asserts! (not (get is-executed proposal)) err-already-exists)
+    (asserts! (> (get votes-for proposal) (get votes-against proposal)) err-invalid-amount)
+    (asserts! (is-eq tx-sender (get proposer proposal)) err-unauthorized)
+    
+    (map-set voting-proposals
+      { proposal-id: proposal-id }
+      (merge proposal { is-executed: true })
+    )
+    
+    (ok true)
+  )
+)
+
+(define-read-only (get-proposal-info (proposal-id uint))
+  (map-get? voting-proposals { proposal-id: proposal-id })
+)
+
+(define-read-only (get-vote-info (proposal-id uint) (voter principal))
+  (map-get? proposal-votes { proposal-id: proposal-id, voter: voter })
+)
+
+(define-read-only (get-proposal-result (proposal-id uint))
+  (match (map-get? voting-proposals { proposal-id: proposal-id })
+    proposal (let (
+      (total-votes (+ (get votes-for proposal) (get votes-against proposal)))
+      (movie (unwrap-panic (map-get? movies { movie-id: (get movie-id proposal) })))
+    )
+      (some {
+        total-votes: total-votes,
+        votes-for: (get votes-for proposal),
+        votes-against: (get votes-against proposal),
+        is-passed: (> (get votes-for proposal) (get votes-against proposal)),
+        is-active: (and (get is-active proposal) (< stacks-block-height (get end-block proposal))),
+        participation-rate: (if (> total-votes u0) 
+                             (/ (* total-votes u10000) (get total-supply movie))
+                             u0)
+      })
+    )
+    none
+  )
+)
+
+(define-read-only (get-next-proposal-id)
+  (var-get next-proposal-id)
 )
