@@ -16,6 +16,10 @@
 (define-constant err-insufficient-voting-power (err u112))
 (define-constant err-tier-not-found (err u113))
 (define-constant err-invalid-tier-config (err u114))
+(define-constant err-deadline-not-reached (err u115))
+(define-constant err-target-reached (err u116))
+(define-constant err-already-refunded (err u117))
+(define-constant err-no-investment (err u118))
 
 (define-data-var next-movie-id uint u1)
 (define-data-var next-proposal-id uint u1)
@@ -34,7 +38,8 @@
     box-office-earnings: uint,
     is-active: bool,
     creation-block: uint,
-    distribution-count: uint
+    distribution-count: uint,
+    funding-deadline: uint
   }
 )
 
@@ -100,6 +105,11 @@
   }
 )
 
+(define-map refund-claims
+  { movie-id: uint, investor: principal }
+  { refunded: bool, refund-amount: uint, refund-block: uint }
+)
+
 (define-public (set-oracle (new-oracle principal))
   (begin
     (asserts! (is-eq tx-sender contract-owner) err-owner-only)
@@ -124,7 +134,8 @@
         box-office-earnings: u0,
         is-active: true,
         creation-block: stacks-block-height,
-        distribution-count: u0
+        distribution-count: u0,
+        funding-deadline: (+ stacks-block-height u4320)
       }
     )
     (map-set movie-investors
@@ -322,6 +333,59 @@
     (asserts! (is-eq tx-sender contract-owner) err-owner-only)
     (asserts! (<= duration u1440) err-invalid-amount)
     (ok (var-set early-bird-duration duration))
+  )
+)
+
+(define-public (set-funding-deadline (movie-id uint) (deadline uint))
+  (let (
+    (movie (unwrap! (map-get? movies { movie-id: movie-id }) err-not-found))
+  )
+    (asserts! (is-eq tx-sender (get creator movie)) err-unauthorized)
+    (asserts! (get is-active movie) err-movie-not-active)
+    (asserts! (> deadline stacks-block-height) err-invalid-amount)
+    (map-set movies
+      { movie-id: movie-id }
+      (merge movie { funding-deadline: deadline })
+    )
+    (ok true)
+  )
+)
+
+(define-public (claim-refund (movie-id uint))
+  (let (
+    (movie (unwrap! (map-get? movies { movie-id: movie-id }) err-not-found))
+    (investor-balance (unwrap! (map-get? investor-balances { movie-id: movie-id, investor: tx-sender }) err-no-investment))
+    (refund-status (default-to { refunded: false, refund-amount: u0, refund-block: u0 } 
+                               (map-get? refund-claims { movie-id: movie-id, investor: tx-sender })))
+    (token-balance (get balance investor-balance))
+  )
+    (asserts! (not (get refunded refund-status)) err-already-refunded)
+    (asserts! (>= stacks-block-height (get funding-deadline movie)) err-deadline-not-reached)
+    (asserts! (< (get funds-raised movie) (get target-amount movie)) err-target-reached)
+    (asserts! (> token-balance u0) err-no-investment)
+    
+    (let (
+      (refund-amount (if (is-eq (get total-supply movie) u0)
+                        u0
+                        (/ (* (get funds-raised movie) token-balance) (get total-supply movie))))
+    )
+      (asserts! (> refund-amount u0) err-invalid-amount)
+      
+      (try! (as-contract (stx-transfer? refund-amount tx-sender tx-sender)))
+      (try! (ft-burn? movie-token token-balance tx-sender))
+      
+      (map-set refund-claims
+        { movie-id: movie-id, investor: tx-sender }
+        { refunded: true, refund-amount: refund-amount, refund-block: stacks-block-height }
+      )
+      
+      (map-set investor-balances
+        { movie-id: movie-id, investor: tx-sender }
+        { balance: u0 }
+      )
+      
+      (ok refund-amount)
+    )
   )
 )
 
@@ -684,6 +748,56 @@
       blocks-remaining: u0,
       bonus-percentage: u0,
       duration-blocks: u0
+    }
+  )
+)
+
+(define-read-only (get-refund-status (movie-id uint) (investor principal))
+  (map-get? refund-claims { movie-id: movie-id, investor: investor })
+)
+
+(define-read-only (is-refund-eligible (movie-id uint) (investor principal))
+  (match (map-get? movies { movie-id: movie-id })
+    movie
+    (match (map-get? investor-balances { movie-id: movie-id, investor: investor })
+      investor-balance
+      (let (
+        (refund-status (default-to { refunded: false, refund-amount: u0, refund-block: u0 } 
+                                   (map-get? refund-claims { movie-id: movie-id, investor: investor })))
+      )
+        {
+          is-eligible: (and
+            (not (get refunded refund-status))
+            (>= stacks-block-height (get funding-deadline movie))
+            (< (get funds-raised movie) (get target-amount movie))
+            (> (get balance investor-balance) u0)
+          ),
+          deadline-passed: (>= stacks-block-height (get funding-deadline movie)),
+          target-not-reached: (< (get funds-raised movie) (get target-amount movie)),
+          has-investment: (> (get balance investor-balance) u0),
+          already-refunded: (get refunded refund-status),
+          deadline-block: (get funding-deadline movie),
+          current-block: stacks-block-height
+        }
+      )
+      {
+        is-eligible: false,
+        deadline-passed: false,
+        target-not-reached: false,
+        has-investment: false,
+        already-refunded: false,
+        deadline-block: u0,
+        current-block: stacks-block-height
+      }
+    )
+    {
+      is-eligible: false,
+      deadline-passed: false,
+      target-not-reached: false,
+      has-investment: false,
+      already-refunded: false,
+      deadline-block: u0,
+      current-block: stacks-block-height
     }
   )
 )
