@@ -20,6 +20,9 @@
 (define-constant err-target-reached (err u116))
 (define-constant err-already-refunded (err u117))
 (define-constant err-no-investment (err u118))
+(define-constant err-invalid-milestone (err u119))
+(define-constant err-milestone-not-found (err u120))
+(define-constant err-milestone-already-completed (err u121))
 
 (define-data-var next-movie-id uint u1)
 (define-data-var next-proposal-id uint u1)
@@ -108,6 +111,23 @@
 (define-map refund-claims
   { movie-id: uint, investor: principal }
   { refunded: bool, refund-amount: uint, refund-block: uint }
+)
+
+(define-map movie-milestones
+  { movie-id: uint, milestone-id: uint }
+  {
+    title: (string-ascii 100),
+    description: (string-ascii 200),
+    target-date: uint,
+    is-completed: bool,
+    completed-at: uint,
+    funds-released: uint
+  }
+)
+
+(define-map movie-milestone-counter
+  { movie-id: uint }
+  { next-milestone-id: uint, total-completed: uint }
 )
 
 (define-public (set-oracle (new-oracle principal))
@@ -798,6 +818,71 @@
       already-refunded: false,
       deadline-block: u0,
       current-block: stacks-block-height
+    }
+  )
+)
+
+(define-public (create-milestone (movie-id uint) (title (string-ascii 100)) (description (string-ascii 200)) (target-date uint) (funds-to-release uint))
+  (let (
+    (movie (unwrap! (map-get? movies { movie-id: movie-id }) err-not-found))
+    (counter-data (default-to { next-milestone-id: u1, total-completed: u0 } 
+                              (map-get? movie-milestone-counter { movie-id: movie-id })))
+    (milestone-id (get next-milestone-id counter-data))
+  )
+    (asserts! (is-eq tx-sender (get creator movie)) err-unauthorized)
+    (asserts! (> target-date stacks-block-height) err-invalid-milestone)
+    (map-set movie-milestones
+      { movie-id: movie-id, milestone-id: milestone-id }
+      {
+        title: title,
+        description: description,
+        target-date: target-date,
+        is-completed: false,
+        completed-at: u0,
+        funds-released: funds-to-release
+      }
+    )
+    (map-set movie-milestone-counter
+      { movie-id: movie-id }
+      { next-milestone-id: (+ milestone-id u1), total-completed: (get total-completed counter-data) }
+    )
+    (ok milestone-id)
+  )
+)
+
+(define-public (complete-milestone (movie-id uint) (milestone-id uint))
+  (let (
+    (movie (unwrap! (map-get? movies { movie-id: movie-id }) err-not-found))
+    (milestone (unwrap! (map-get? movie-milestones { movie-id: movie-id, milestone-id: milestone-id }) err-milestone-not-found))
+    (counter-data (unwrap! (map-get? movie-milestone-counter { movie-id: movie-id }) err-not-found))
+  )
+    (asserts! (is-eq tx-sender (get creator movie)) err-unauthorized)
+    (asserts! (not (get is-completed milestone)) err-milestone-already-completed)
+    (map-set movie-milestones
+      { movie-id: movie-id, milestone-id: milestone-id }
+      (merge milestone { is-completed: true, completed-at: stacks-block-height })
+    )
+    (map-set movie-milestone-counter
+      { movie-id: movie-id }
+      { next-milestone-id: (get next-milestone-id counter-data), total-completed: (+ (get total-completed counter-data) u1) }
+    )
+    (ok true)
+  )
+)
+
+(define-read-only (get-milestone (movie-id uint) (milestone-id uint))
+  (map-get? movie-milestones { movie-id: movie-id, milestone-id: milestone-id })
+)
+
+(define-read-only (get-milestone-summary (movie-id uint))
+  (let (
+    (counter-data (default-to { next-milestone-id: u1, total-completed: u0 } 
+                              (map-get? movie-milestone-counter { movie-id: movie-id })))
+  )
+    {
+      total-milestones: (- (get next-milestone-id counter-data) u1),
+      completed-milestones: (get total-completed counter-data),
+      pending-milestones: (- (- (get next-milestone-id counter-data) u1) (get total-completed counter-data))
     }
   )
 )
